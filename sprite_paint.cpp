@@ -10,7 +10,10 @@ struct Window {
     u64 height;
     const char* title;
     u64 fps = 60;
+    Rectangle sprite_boundary = {0, 0, (float)width / 2.f, (float)height / 2.f};
 };
+
+
 
 struct Sprite {
     u32* pixels = NULL;
@@ -33,21 +36,18 @@ void init_window(Window& window) {
     SetTargetFPS(window.fps);
 }
 
+void draw_sprite(const Image& img, Rectangle boundary) {
+}
+
 int main() {
-    std::cout << "sizeof(u32)" << sizeof(u32) << "\n";
     Window window = {.width = 1000, .height = 1000, .title = "Sprite Paint"};
     init_window(window);
-    Sprite sprite = Sprite(100, 100, 0xffff00ff);
     Image img = GenImageColor(100, 100, BLACK);
-    u32* pixels_img = (u32*)img.data;
-    for(int i = 0; i < 100 * 100; ++i) {
-	pixels_img[i] = sprite.pixels[i];
-    }
     Texture tex = LoadTextureFromImage(img);
     while(!WindowShouldClose()) {
 	BeginDrawing();
 	ClearBackground(RED);
-	DrawTexture(tex, 0, 0, WHITE);
+	DrawTexturePro(tex, {0.f, 0.f, (float)img.width, (float)img.height}, window.sprite_boundary, {0.f, 0.f}, 0.f, WHITE);
 	EndDrawing();
     }
     CloseWindow();
