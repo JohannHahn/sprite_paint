@@ -20,12 +20,19 @@ struct Window {
 struct Sprite {
     Image img;
     Texture tex;
-    Vector2 selected = {23.f, 23.f};
+    Vector2 selected = {0.f, 0.f};
+    const char* name = "";
     void set_selected(Vector2 new_pos) {
-	std::cout << "new pos = " << new_pos.x << ", " << new_pos.y << "\n";
-	//assert(new_pos.x < img.width && new_pos.x >= 0.f);
-	//assert(new_pos.y < img.height && new_pos.y >= 0.f);
+	assert(new_pos.x < img.width && new_pos.x >= 0.f);
+	assert(new_pos.y < img.height && new_pos.y >= 0.f);
 	selected = new_pos;
+    }
+    void set_pixel(Vector2 pos, Color color) {
+	ImageDrawPixel(&img, pos.x, pos.y, color);
+	UpdateTexture(tex, img.data);
+    }
+    void set_selected(Color color) {
+	set_pixel(selected, color);
     }
 };
 
@@ -43,13 +50,19 @@ void draw_sprite(const Sprite& sprite, Rectangle boundary) {
 void controls(const Window& window, Sprite& sprite) {
     Vector2 mouse_pos = GetMousePosition();
     if (CheckCollisionPointRec(mouse_pos, window.sprite_boundary)) {
-	DrawText("HIIIII", window.width / 2 + 200, window.height / 2 + 200, 5, WHITE);
-	Vector2 new_pos = {floor(mouse_pos.x), floor(mouse_pos.y)};
-	new_pos = Vector2Divide(new_pos, {(float)window.width, (float)window.height});	
-	float cell_size = window.sprite_boundary.width / sprite.tex.width;
+	Vector2 new_pos = mouse_pos;
+	new_pos = Vector2Divide(new_pos, {window.sprite_boundary.width, window.sprite_boundary.height});	
 	new_pos = Vector2Multiply(new_pos, {(float)sprite.img.width, (float)sprite.img.height});
-	new_pos = Vector2Add(new_pos, {cell_size / 2.f, cell_size / 2.f});
+	new_pos = {floor(new_pos.x), floor(new_pos.y)};
 	sprite.set_selected(new_pos);
+
+	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+	    sprite.set_selected(WHITE);
+	}
+    }
+    if (IsKeyPressed(KEY_S)) {
+	ExportImage(sprite.img, sprite.name);
+	
     }
 }
 
@@ -57,8 +70,9 @@ int main() {
     Window window = {.width = 1000, .height = 1000, .title = "Sprite Paint"};
     init_window(window);
     Sprite sprite;
-    sprite.img = GenImageColor(24, 24, BLACK);
+    sprite.img = GenImageColor(10, 10, BLACK);
     sprite.tex = LoadTextureFromImage(sprite.img);
+    sprite.name = "sprite.png";
     while(!WindowShouldClose()) {
 	BeginDrawing();
 	ClearBackground(RED);
