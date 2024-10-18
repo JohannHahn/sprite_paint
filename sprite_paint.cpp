@@ -30,6 +30,11 @@ struct Slider {
     float value;
     Rectangle boundary;
     Rectangle handle_rec;
+    bool dragging = false;
+    void set_value(float value) {
+	this->value = Clamp(value, 0.f, 1.f);
+	handle_rec.x = boundary.x + boundary.width * value - handle_rec.width / 2.f;
+    }
 };
 
 struct Color_Picker {
@@ -131,12 +136,16 @@ void draw_sprite(const Sprite& sprite, Window& window) {
 
 void check_slider(Slider& slider, Vector2 mouse_pos) {
     if (CheckCollisionPointRec(mouse_pos, slider.boundary)) {
-	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-	    slider.value = (mouse_pos.x - slider.boundary.x) / slider.boundary.width;
-	    DrawText(TextFormat("%d", slider.value), 500, 500, 15, WHITE);
-	    slider.value = Clamp(slider.value, 0.f, 1.f);
-	    slider.handle_rec.x = slider.boundary.x + slider.boundary.width * slider.value - slider.handle_rec.width / 2.f;
+	if (!slider.dragging && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+	    slider.dragging = true; 
 	}
+
+	if (slider.dragging && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+	    slider.set_value((mouse_pos.x - slider.boundary.x) / slider.boundary.width);
+	}
+    }
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+	slider.dragging = false;
     }
 }
 
