@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
@@ -38,11 +39,13 @@ struct Button {
     Rectangle boundary;
     bool down = false;
     const char* text;
+    Color color;
     void draw() {
 	Rectangle rec = down ? squish_rec(boundary, 5.f) : boundary;
-	DrawRectangleRec(rec, GRAY);
+	DrawRectangleRec(rec, color);
+	DrawRectangleLinesEx(rec, 2, BLACK);
 	float font_size = rec.height - rec.height / 3.f;
-	DrawText(text, rec.x, rec.y + font_size / 2.f, font_size, BLACK);
+	DrawText(text, rec.x + font_size * 2, rec.y + font_size / 3.f, font_size, BLACK);
     }
 };
 
@@ -51,14 +54,23 @@ struct Slider {
     Rectangle boundary;
     Rectangle handle_rec;
     bool dragging = false;
+    Color bg_color = GRAY;
+    Color border_color = BLACK;
+    Color handle_color = LIGHTGRAY;
+    const char* handle_text = "-";
     void set_value(float value) {
 	this->value = Clamp(value, 0.f, 1.f);
 	handle_rec.x = boundary.x + boundary.width * value - handle_rec.width / 2.f;
     }
     void draw() {
-	DrawRectangleLinesEx(boundary, 2.f, WHITE);
-	DrawRectangleRec(squish_rec(boundary, 10.f), WHITE);
-	DrawRectangleRec(handle_rec, GRAY);
+	//Border
+	DrawRectangleRec(boundary, border_color);
+	//Inner box
+	DrawRectangleRec(squish_rec(boundary, 5.f), bg_color);
+	// Handle
+	DrawRectangleRec(handle_rec, handle_color);
+	DrawRectangleLinesEx(handle_rec, 2.f, BLACK);
+	DrawText(handle_text, handle_rec.x + handle_rec.width / 4.f, handle_rec.y + handle_rec.height / 2.f - handle_rec.width / 2.f, handle_rec.width, WHITE);
     }
 };
 
@@ -82,19 +94,27 @@ struct Color_Picker {
 	g.value = color.g / 255.f;
 	b.value = color.b / 255.f;
 	a.value = color.a / 255.f;
+
+	r.bg_color = RED;
+	r.handle_text = "R";
+	g.bg_color = GREEN;
+	g.handle_text = "G";
+	b.bg_color = BLUE;
+	b.handle_text = "B";
+	a.handle_text = "A";
+
 	float max_slot_hor = 20.f;
-	r.boundary = rec_slice_vert(boundary, 0, 5);  
+	r.boundary = rec_slice_vert(boundary, 0, 4);  
 	r.handle_rec = rec_slice_horz(r.boundary, r.value * (max_slot_hor - 1), max_slot_hor);
-	g.boundary = rec_slice_vert(boundary, 1, 5);  
+	g.boundary = rec_slice_vert(boundary, 1, 4);  
 	g.handle_rec = rec_slice_horz(g.boundary, g.value * (max_slot_hor - 1), max_slot_hor);
-	b.boundary = rec_slice_vert(boundary, 2, 5);  
+	b.boundary = rec_slice_vert(boundary, 2, 4);  
 	b.handle_rec = rec_slice_horz(b.boundary, b.value * (max_slot_hor - 1), max_slot_hor);
-	a.boundary = rec_slice_vert(boundary, 3, 5);  
+	a.boundary = rec_slice_vert(boundary, 3, 4);  
 	a.handle_rec = rec_slice_horz(a.boundary, a.value * (max_slot_hor - 1), max_slot_hor);
 	color = to_color();
     }
     void draw() {
-	DrawRectangleRec(rec_slice_vert(boundary, 4, 5), to_color());
 	r.draw();
 	g.draw();
 	b.draw();
@@ -109,9 +129,25 @@ struct Window {
     u64 fps = 60;
     Vector2 mouse_pos;
     Mouse_Mode mouse_mode = DRAW;
+    Color bg_color = {0x18, 0x18, 0x18, 0xff};
     Color draw_color = WHITE;
     Color_Picker color_picker;
     Button set_bg_button;
+    Button set_dc_button;
+    void frame_update() {
+	Color cp_color = color_picker.to_color();
+	set_bg_button.color = cp_color;
+	set_dc_button.color = cp_color;
+	color_picker.a.bg_color = {0xff, 0xff, 0xff, cp_color.a};
+	color_picker.r.bg_color = {0xff, 0, 0, color_picker.a.bg_color.r};
+	color_picker.g.bg_color = {0, 0xff, 0, color_picker.a.bg_color.g};
+	color_picker.b.bg_color = {0, 0, 0xff, color_picker.a.bg_color.b};
+    }
+    void draw() {
+	color_picker.draw();
+	set_bg_button.draw();
+	set_dc_button.draw();
+    }
 };
 
 struct Sprite {
@@ -191,8 +227,15 @@ void controls(Window& window, Sprite& sprite) {
 	    sprite.set_bg_col(window.color_picker.to_color());
 	}
     }
+    if (CheckCollisionPointRec(window.mouse_pos, window.set_dc_button.boundary)) {
+	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+	    window.set_dc_button.down = true;
+	    window.draw_color = window.color_picker.to_color();
+	}
+    }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
 	window.set_bg_button.down = false;
+	window.set_dc_button.down = false;
     }
 
 }
@@ -202,20 +245,23 @@ int main() {
     window.color_picker.setup({window.width / 2.f, 0.f, window.width / 2.f, window.height / 2.f}, window.draw_color);
     window.set_bg_button.boundary = {window.width / 2.f, window.color_picker.boundary.height, window.width / 2.f, window.height / 20.f};
     window.set_bg_button.text = "set background color";
+    window.set_dc_button.boundary = window.set_bg_button.boundary; 
+    window.set_dc_button.boundary.y += window.set_dc_button.boundary.height;
+    window.set_dc_button.text = "set draw color";
     init_window(window);
     Sprite sprite;
-    sprite.img = GenImageColor(10, 10, BLACK);
+    sprite.bg_color = GRAY;
+    sprite.img = GenImageColor(10, 10, sprite.bg_color);
     sprite.tex = LoadTextureFromImage(sprite.img);
     sprite.name = "sprite.png";
     sprite.boundary = {0.f, 0.f, window.width / 2.f, window.height / 2.f};
     while(!WindowShouldClose()) {
 	BeginDrawing();
-	ClearBackground(RAYWHITE);
+	ClearBackground(window.bg_color);
 	sprite.draw(window);
-	window.color_picker.draw();
-	window.set_bg_button.draw();
+	window.draw();
 	controls(window, sprite);
-	window.draw_color = window.color_picker.to_color();
+	window.frame_update();
 	EndDrawing();
     }
     CloseWindow();
