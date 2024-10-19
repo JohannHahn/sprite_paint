@@ -215,7 +215,7 @@ void controls(Window& window, Sprite& sprite) {
 	}
     }
     if (IsKeyPressed(KEY_S)) {
-	ExportImage(sprite.img, sprite.name);
+	ExportImage(sprite.img, TextFormat("img/%s", sprite.name));
     }
     check_slider(window.color_picker.r, window.mouse_pos);
     check_slider(window.color_picker.g, window.mouse_pos);
