@@ -17,6 +17,7 @@ struct Window;
 struct Sprite;
 
 
+
 Rectangle squish_rec(Rectangle rec, float padding) {
     return {rec.x + padding, rec.y + padding, rec.width - padding * 2.f, rec.height - padding * 2.f};
 }
@@ -34,6 +35,19 @@ Rectangle rec_slice_horz(Rectangle rec, u64 slot, u64 max_slots) {
     float x = rec.x + width * slot;
     return {x, rec.y, width, rec.height};
 }
+
+struct Layout {
+    bool vertical = true;
+    Rectangle boundary = {0, 0, 0, 0};
+    u64 slot_count = 0;
+    Rectangle get_slot(u64 slot) {
+	assert(slot < slot_count);
+	Rectangle rec; 
+	if (vertical) rec = rec_slice_vert(boundary, slot, slot_count);
+	else rec = rec_slice_horz(boundary, slot, slot_count);
+	return rec;
+    }
+};
 
 struct Button {
     Rectangle boundary;
@@ -79,7 +93,8 @@ struct Color_Picker {
     Slider g;
     Slider b;
     Slider a;
-    Rectangle boundary;
+    Layout layout;
+    //Rectangle boundary;
     Color to_color() {
 	Color color = BLACK;
 	color.r = r.value * 255;
@@ -89,7 +104,9 @@ struct Color_Picker {
 	return color;
     }
     void setup(Rectangle boundary, Color color) {
-	this->boundary = boundary;
+	layout.boundary = boundary;
+	layout.vertical = true;
+	layout.slot_count = 4;
 	r.value = color.r / 255.f;
 	g.value = color.g / 255.f;
 	b.value = color.b / 255.f;
@@ -104,13 +121,13 @@ struct Color_Picker {
 	a.handle_text = "A";
 
 	float max_slot_hor = 20.f;
-	r.boundary = rec_slice_vert(boundary, 0, 4);  
+	r.boundary = layout.get_slot(0);
 	r.handle_rec = rec_slice_horz(r.boundary, r.value * (max_slot_hor - 1), max_slot_hor);
-	g.boundary = rec_slice_vert(boundary, 1, 4);  
+	g.boundary = layout.get_slot(1);
 	g.handle_rec = rec_slice_horz(g.boundary, g.value * (max_slot_hor - 1), max_slot_hor);
-	b.boundary = rec_slice_vert(boundary, 2, 4);  
+	b.boundary = layout.get_slot(2);
 	b.handle_rec = rec_slice_horz(b.boundary, b.value * (max_slot_hor - 1), max_slot_hor);
-	a.boundary = rec_slice_vert(boundary, 3, 4);  
+	a.boundary = layout.get_slot(3);
 	a.handle_rec = rec_slice_horz(a.boundary, a.value * (max_slot_hor - 1), max_slot_hor);
 	color = to_color();
     }
@@ -243,7 +260,7 @@ void controls(Window& window, Sprite& sprite) {
 int main() {
     Window window = {.width = 1000, .height = 1000, .title = "Sprite Paint"};
     window.color_picker.setup({window.width / 2.f, 0.f, window.width / 2.f, window.height / 2.f}, window.draw_color);
-    window.set_bg_button.boundary = {window.width / 2.f, window.color_picker.boundary.height, window.width / 2.f, window.height / 20.f};
+    window.set_bg_button.boundary = {window.width / 2.f, window.color_picker.layout.boundary.height, window.width / 2.f, window.height / 20.f};
     window.set_bg_button.text = "set background color";
     window.set_dc_button.boundary = window.set_bg_button.boundary; 
     window.set_dc_button.boundary.y += window.set_dc_button.boundary.height;
