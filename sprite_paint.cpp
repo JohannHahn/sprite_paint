@@ -36,11 +36,31 @@ Rectangle rec_slice_horz(Rectangle rec, u64 slot, u64 max_slots) {
     return {x, rec.y, width, rec.height};
 }
 
+Color invert_color(Color color) {
+    u32 color_int = ColorToInt(color);
+    color_int = 0xFFFFFF - color_int | 0xFF000000;
+    return *(Color*)(&color_int);
+}
+
+Color color_brightness(Color color, float factor) {
+    color.r *= factor;
+    color.g *= factor;
+    color.b *= factor;
+    return color; 
+}
+
+Color remix_color(Color color) {
+    float reverse_brightness = 1.f - ((color.r / 255.f + color.g / 255.f + color.b / 255.f) / 3.f);
+    return color_brightness(WHITE, reverse_brightness);
+}
+
 struct Layout {
     bool vertical = true;
     Rectangle boundary = {0, 0, 0, 0};
     u64 slot_count = 0;
-    Rectangle get_slot(u64 slot) {
+    Layout(Rectangle boundary, u64 slot_count, bool vertical):
+	boundary(boundary), slot_count(slot_count), vertical(vertical){};
+    Rectangle get_slot(u64 slot) const {
 	assert(slot < slot_count);
 	Rectangle rec; 
 	if (vertical) rec = rec_slice_vert(boundary, slot, slot_count);
@@ -56,10 +76,11 @@ struct Button {
     Color color;
     void draw() {
 	Rectangle rec = down ? squish_rec(boundary, 5.f) : boundary;
+	Color inverted_col = remix_color(color);
 	DrawRectangleRec(rec, color);
-	DrawRectangleLinesEx(rec, 2, BLACK);
+	DrawRectangleLinesEx(rec, 2, inverted_col);
 	float font_size = rec.height - rec.height / 3.f;
-	DrawText(text, rec.x + font_size * 2, rec.y + font_size / 3.f, font_size, BLACK);
+	DrawText(text, rec.x + font_size * 2, rec.y + font_size / 3.f, font_size, inverted_col);
     }
 };
 
@@ -93,8 +114,7 @@ struct Color_Picker {
     Slider g;
     Slider b;
     Slider a;
-    Layout layout;
-    //Rectangle boundary;
+    Rectangle boundary;
     Color to_color() {
 	Color color = BLACK;
 	color.r = r.value * 255;
@@ -103,10 +123,8 @@ struct Color_Picker {
 	color.a = a.value * 255;
 	return color;
     }
-    void setup(Rectangle boundary, Color color) {
-	layout.boundary = boundary;
-	layout.vertical = true;
-	layout.slot_count = 4;
+    void setup(Color color, const Layout& layout) {
+	boundary = layout.boundary;
 	r.value = color.r / 255.f;
 	g.value = color.g / 255.f;
 	b.value = color.b / 255.f;
@@ -139,9 +157,17 @@ struct Color_Picker {
     }
 };
 
+struct Layouts {
+    Layouts(Layout top, Layout ui, Layout cp): 
+	top_layout(top), ui_layout(ui), color_picker_layout(cp) {};
+    Layout top_layout;
+    Layout ui_layout;
+    Layout color_picker_layout;
+};
+
 struct Window {
-    u64 width;
-    u64 height;
+    float width;
+    float height;
     const char* title;
     u64 fps = 60;
     Vector2 mouse_pos;
@@ -151,6 +177,9 @@ struct Window {
     Color_Picker color_picker;
     Button set_bg_button;
     Button set_dc_button;
+    Layouts layouts;
+    Window(float width, float height, const char* title, Layouts layouts):
+	width(width), height(height), title(title), layouts(layouts) {};
     void frame_update() {
 	Color cp_color = color_picker.to_color();
 	set_bg_button.color = cp_color;
@@ -204,9 +233,30 @@ struct Sprite {
     }
 };
 
-void init_window(Window& window) {
+Sprite init_sprite(const Window& window) {
+    Sprite sprite;
+    sprite.bg_color = GRAY;
+    sprite.img = GenImageColor(10, 10, sprite.bg_color);
+    sprite.tex = LoadTextureFromImage(sprite.img);
+    sprite.name = "sprite.png";
+    sprite.boundary = {0.f, 0.f, window.width / 2.f, window.height / 2.f};
+    return sprite;
+}
+Window init_window(float width, float height, const char* title) {
+    Layout top_layout = Layout({0, 0, width, height}, 2, false);
+    Layout ui_layout = Layout(top_layout.get_slot(1), 5, true);
+    Layout cp_layout = Layout(ui_layout.get_slot(0), 4, true);
+    Layouts layouts(top_layout, ui_layout, cp_layout);
+    Window window = Window(width, height, title, layouts);
+    window.color_picker.setup(window.draw_color, window.layouts.color_picker_layout);
+    window.set_bg_button.boundary = {window.width / 2.f, window.color_picker.boundary.height, window.width / 2.f, window.height / 20.f};
+    window.set_bg_button.text = "set background color";
+    window.set_dc_button.boundary = window.set_bg_button.boundary; 
+    window.set_dc_button.boundary.y += window.set_dc_button.boundary.height;
+    window.set_dc_button.text = "set draw color";
     InitWindow(window.width, window.height, window.title);
     SetTargetFPS(window.fps);
+    return window;
 }
 
 void check_slider(Slider& slider, Vector2 mouse_pos) {
@@ -258,26 +308,14 @@ void controls(Window& window, Sprite& sprite) {
 }
 
 int main() {
-    Window window = {.width = 1000, .height = 1000, .title = "Sprite Paint"};
-    window.color_picker.setup({window.width / 2.f, 0.f, window.width / 2.f, window.height / 2.f}, window.draw_color);
-    window.set_bg_button.boundary = {window.width / 2.f, window.color_picker.layout.boundary.height, window.width / 2.f, window.height / 20.f};
-    window.set_bg_button.text = "set background color";
-    window.set_dc_button.boundary = window.set_bg_button.boundary; 
-    window.set_dc_button.boundary.y += window.set_dc_button.boundary.height;
-    window.set_dc_button.text = "set draw color";
-    init_window(window);
-    Sprite sprite;
-    sprite.bg_color = GRAY;
-    sprite.img = GenImageColor(10, 10, sprite.bg_color);
-    sprite.tex = LoadTextureFromImage(sprite.img);
-    sprite.name = "sprite.png";
-    sprite.boundary = {0.f, 0.f, window.width / 2.f, window.height / 2.f};
+    Window window = init_window(1000.f, 1000.f, "sprite paint");
+    Sprite sprite = init_sprite(window);
     while(!WindowShouldClose()) {
+	controls(window, sprite);
 	BeginDrawing();
 	ClearBackground(window.bg_color);
 	sprite.draw(window);
 	window.draw();
-	controls(window, sprite);
 	window.frame_update();
 	EndDrawing();
     }
