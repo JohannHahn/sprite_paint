@@ -49,7 +49,7 @@ Color color_brightness(Color color, float factor) {
     return color; 
 }
 
-Color remix_color(Color color) {
+Color reverse_brightness(Color color) {
     float reverse_brightness = 1.f - ((color.r / 255.f + color.g / 255.f + color.b / 255.f) / 3.f);
     return color_brightness(WHITE, reverse_brightness);
 }
@@ -76,11 +76,11 @@ struct Button {
     Color color;
     void draw() {
 	Rectangle rec = down ? squish_rec(boundary, 5.f) : boundary;
-	Color inverted_col = remix_color(color);
+	Color contrast_col = reverse_brightness(color);
 	DrawRectangleRec(rec, color);
-	DrawRectangleLinesEx(rec, 2, inverted_col);
+	DrawRectangleLinesEx(rec, 2, contrast_col);
 	float font_size = rec.height - rec.height / 3.f;
-	DrawText(text, rec.x + font_size * 2, rec.y + font_size / 3.f, font_size, inverted_col);
+	DrawText(text, rec.x + font_size * 2, rec.y + font_size / 3.f, font_size, contrast_col);
     }
 };
 
