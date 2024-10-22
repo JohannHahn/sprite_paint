@@ -198,10 +198,12 @@ struct Window {
 
 struct Sprite {
     Image img;
+    Image preview_img;
     Texture tex;
     const char* name = "";
     Color bg_color = BLACK;
     Rectangle boundary;
+    Vector2 first_cell;
     void set_bg_col(Color color) {
 	for(u64 y = 0; y < img.height; y++) {
 	    for (u64 x = 0; x < img.width; ++x) {
@@ -217,12 +219,42 @@ struct Sprite {
 	ImageDrawPixel(&img, pos.x, pos.y, color);
 	UpdateTexture(tex, img.data);
     }
+    void set_mode (Mouse_Mode mode) {
+	if (mode == DRAW) {
+	    UpdateTexture(tex, img.data);
+	}
+	else if (mode == LINE) {
+	    std::cout << "before setting up line mode\n";
+	    //if (preview_img.data) UnloadImage(preview_img);
+	    std::cout << "after free image\n";
+	    preview_img = ImageCopy(img);
+	    std::cout << "after image copy\n";
+	    UpdateTexture(tex, preview_img.data);
+	    std::cout << "after update texture\n";
+	    std::cout << "setup line mode\n";
+	}
+    }
     void draw(Window& window) {
-	DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
-	if (CheckCollisionPointRec(window.mouse_pos, boundary)) {
-	    float cell_size = boundary.width / tex.width;
-	    Vector2 new_pos = point_to_pixel(window.mouse_pos);
-	    DrawRectangle(new_pos.x * cell_size, new_pos.y * cell_size, cell_size, cell_size, window.draw_color);
+	if (window.mouse_mode == DRAW) {
+	    DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
+	    if (CheckCollisionPointRec(window.mouse_pos, boundary)) {
+		float cell_size = boundary.width / tex.width;
+		Vector2 new_pos = point_to_pixel(window.mouse_pos);
+		DrawRectangle(new_pos.x * cell_size, new_pos.y * cell_size, cell_size, cell_size, window.draw_color);
+	    }
+	}
+	else if (window.mouse_mode == LINE) {
+	     if (CheckCollisionPointRec(window.mouse_pos, boundary)) {
+		Vector2 last_cell = point_to_pixel(window.mouse_pos);
+		if (last_cell.x != first_cell.x && last_cell.y != first_cell.y) {
+		    UnloadImage(preview_img);
+		    preview_img = ImageCopy(img);
+		    ImageDrawLineV(&preview_img, first_cell, last_cell, window.draw_color);
+		    UpdateTexture(tex, preview_img.data);
+		}
+	    }
+	    DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
+	    std::cout << "drew line frame\n";
 	}
     }
     Vector2 point_to_pixel(Vector2 point) {
@@ -240,6 +272,8 @@ Sprite init_sprite(const Window& window) {
     sprite.tex = LoadTextureFromImage(sprite.img);
     sprite.name = "sprite.png";
     sprite.boundary = {0.f, 0.f, window.width / 2.f, window.height / 2.f};
+    sprite.first_cell = {0.f, 0.f};
+    sprite.set_mode(window.mouse_mode);
     return sprite;
 }
 Window init_window(float width, float height, const char* title) {
@@ -254,6 +288,7 @@ Window init_window(float width, float height, const char* title) {
     window.set_dc_button.boundary = window.set_bg_button.boundary; 
     window.set_dc_button.boundary.y += window.set_dc_button.boundary.height;
     window.set_dc_button.text = "set draw color";
+    window.mouse_mode = LINE;
     InitWindow(window.width, window.height, window.title);
     SetTargetFPS(window.fps);
     return window;
@@ -278,7 +313,12 @@ void controls(Window& window, Sprite& sprite) {
     window.mouse_pos = GetMousePosition();
     if (CheckCollisionPointRec(window.mouse_pos, sprite.boundary)) {
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-	    sprite.set_pixel(sprite.point_to_pixel(window.mouse_pos), window.draw_color);
+	    if (window.mouse_mode == DRAW) {
+		sprite.set_pixel(sprite.point_to_pixel(window.mouse_pos), window.draw_color);
+	    }
+	    else if (window.mouse_mode == LINE) {
+		sprite.first_cell = sprite.point_to_pixel(window.mouse_pos);
+	    }
 	}
     }
     if (IsKeyPressed(KEY_S)) {
