@@ -299,15 +299,31 @@ struct Sprite {
 	return point.x < img.width && point.y < img.height && point.x >= 0.f && point.y >= 0.f;
     }
 
-    void fill_region(Vector2 point, Color empty) {
-	if (ColorIsEqual(draw_color, empty)) return;
-	if (!is_point_inside(point)) return;
-	if (!ColorIsEqual(GetImageColor(img, point.x, point.y), bg_color)) return;
+    void fill_region(Vector2 point) {
+	Color empty = GetImageColor(img, point.x, point.y);
+	if (ColorIsEqual(empty, draw_color)) return;
 	ImageDrawPixel(&img, point.x, point.y, draw_color);
-	fill_region({point.x + 1, point.y}, empty);
-	fill_region({point.x - 1, point.y}, empty);
-	fill_region({point.x, point.y + 1}, empty);
-	fill_region({point.x, point.y - 1}, empty);
+	Vector2 new_point = {point.x + 1, point.y};
+	Color new_color; 
+	if (is_point_inside(new_point)) {
+	    new_color = GetImageColor(img, new_point.x, new_point.y);
+	    if (ColorIsEqual(empty, new_color)) fill_region(new_point);
+	}
+	new_point = {point.x - 1, point.y};
+	if (is_point_inside(new_point)) {
+	    new_color = GetImageColor(img, new_point.x, new_point.y);
+	    if (ColorIsEqual(empty, new_color)) fill_region(new_point);
+	}
+	new_point = {point.x, point.y + 1};
+	if (is_point_inside(new_point)) {
+	    new_color = GetImageColor(img, new_point.x, new_point.y);
+	    if (ColorIsEqual(empty, new_color)) fill_region(new_point);
+	}
+	new_point = {point.x, point.y - 1};
+	if (is_point_inside(new_point)) {
+	    new_color = GetImageColor(img, new_point.x, new_point.y);
+	    if (ColorIsEqual(empty, new_color)) fill_region(new_point);
+	}
     }
 };
 
@@ -336,6 +352,7 @@ Window init_window(float width, float height, const char* title) {
     window.toggle_mouse_mode_button.boundary = window.layouts.button_layout.get_slot(2); 
     window.toggle_mouse_mode_button.text = mode_as_string(DRAW);
     window.toggle_mouse_mode_button.color = WHITE;
+    window.mouse.mode = DRAW;
     InitWindow(window.width, window.height, window.title);
     SetTargetFPS(window.fps);
     return window;
@@ -368,7 +385,7 @@ void controls(Window& window, Sprite& sprite) {
 	    }
 	    else if (window.mouse.mode == FILL) {
 		Vector2 cell = sprite.point_to_pixel(window.mouse.position);
-		sprite.fill_region(cell, GetImageColor(sprite.img, cell.x, cell.y));
+		sprite.fill_region(cell);
 	    }
 	}
     }
@@ -408,6 +425,7 @@ void controls(Window& window, Sprite& sprite) {
 int main() {
     Window window = init_window(1000.f, 1000.f, "sprite paint");
     Sprite sprite = init_sprite(window);
+    std::cout << "after init\n";
     while(!WindowShouldClose()) {
 	controls(window, sprite);
 	BeginDrawing();
