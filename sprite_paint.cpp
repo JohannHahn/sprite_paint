@@ -17,6 +17,21 @@ struct Window;
 struct Sprite;
 
 
+const char* mode_as_string(Mouse_Mode mode) {
+    switch(mode) {
+
+    case DRAW:
+	return "Draw";
+    case LINE:
+	return "Line";
+    case FILL:
+	return "Fill";
+    case MOUSE_MODE_MAX:
+	assert(0);
+    }
+    assert(0);
+    return "";
+}
 
 Rectangle squish_rec(Rectangle rec, float padding) {
     return {rec.x + padding, rec.y + padding, rec.width - padding * 2.f, rec.height - padding * 2.f};
@@ -158,11 +173,18 @@ struct Color_Picker {
 };
 
 struct Layouts {
-    Layouts(Layout top, Layout ui, Layout cp): 
-	top_layout(top), ui_layout(ui), color_picker_layout(cp) {};
+    Layouts(Layout top, Layout ui, Layout cp, Layout button_layout): 
+	top_layout(top), ui_layout(ui), color_picker_layout(cp), button_layout(button_layout) {};
     Layout top_layout;
     Layout ui_layout;
     Layout color_picker_layout;
+    Layout button_layout;
+};
+
+struct Mouse_Data {
+    Vector2 position;
+    Vector2 last_click;
+    Mouse_Mode mode;
 };
 
 struct Window {
@@ -170,14 +192,13 @@ struct Window {
     float height;
     const char* title;
     u64 fps = 60;
-    Vector2 mouse_pos;
-    Mouse_Mode mouse_mode = DRAW;
     Color bg_color = {0x18, 0x18, 0x18, 0xff};
-    Color draw_color = WHITE;
     Color_Picker color_picker;
     Button set_bg_button;
     Button set_dc_button;
+    Button toggle_mouse_mode_button;
     Layouts layouts;
+    Mouse_Data mouse;
     Window(float width, float height, const char* title, Layouts layouts):
 	width(width), height(height), title(title), layouts(layouts) {};
     void frame_update() {
@@ -193,8 +214,10 @@ struct Window {
 	color_picker.draw();
 	set_bg_button.draw();
 	set_dc_button.draw();
+	toggle_mouse_mode_button.draw();
     }
 };
+
 
 struct Sprite {
     Image img;
@@ -202,8 +225,8 @@ struct Sprite {
     Texture tex;
     const char* name = "";
     Color bg_color = BLACK;
+    Color draw_color = WHITE;
     Rectangle boundary;
-    Vector2 first_cell;
     void set_bg_col(Color color) {
 	for(u64 y = 0; y < img.height; y++) {
 	    for (u64 x = 0; x < img.width; ++x) {
@@ -224,44 +247,67 @@ struct Sprite {
 	    UpdateTexture(tex, img.data);
 	}
 	else if (mode == LINE) {
-	    std::cout << "before setting up line mode\n";
 	    //if (preview_img.data) UnloadImage(preview_img);
-	    std::cout << "after free image\n";
 	    preview_img = ImageCopy(img);
-	    std::cout << "after image copy\n";
 	    UpdateTexture(tex, preview_img.data);
-	    std::cout << "after update texture\n";
-	    std::cout << "setup line mode\n";
+	}
+	else if (mode == FILL) {
+
 	}
     }
     void draw(Window& window) {
-	if (window.mouse_mode == DRAW) {
+	Vector2 first_cell = window.mouse.last_click;
+	if (window.mouse.mode == DRAW) {
 	    DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
-	    if (CheckCollisionPointRec(window.mouse_pos, boundary)) {
+	    if (CheckCollisionPointRec(window.mouse.position, boundary)) {
 		float cell_size = boundary.width / tex.width;
-		Vector2 new_pos = point_to_pixel(window.mouse_pos);
-		DrawRectangle(new_pos.x * cell_size, new_pos.y * cell_size, cell_size, cell_size, window.draw_color);
+		Vector2 new_pos = point_to_pixel(window.mouse.position);
+		DrawRectangle(new_pos.x * cell_size, new_pos.y * cell_size, cell_size, cell_size, draw_color);
 	    }
 	}
-	else if (window.mouse_mode == LINE) {
-	     if (CheckCollisionPointRec(window.mouse_pos, boundary)) {
-		Vector2 last_cell = point_to_pixel(window.mouse_pos);
+	else if (window.mouse.mode == LINE) {
+	     if (CheckCollisionPointRec(window.mouse.position, boundary)) {
+		Vector2 last_cell = point_to_pixel(window.mouse.position);
 		if (last_cell.x != first_cell.x && last_cell.y != first_cell.y) {
 		    UnloadImage(preview_img);
 		    preview_img = ImageCopy(img);
-		    ImageDrawLineV(&preview_img, first_cell, last_cell, window.draw_color);
+		    ImageDrawLineV(&preview_img, first_cell, last_cell, draw_color);
 		    UpdateTexture(tex, preview_img.data);
 		}
 	    }
 	    DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
-	    std::cout << "drew line frame\n";
+	}
+	else if (window.mouse.mode == FILL) {
+	    UpdateTexture(tex, img.data);
+	    DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
+	    if (CheckCollisionPointRec(window.mouse.position, boundary)) {
+		float cell_size = boundary.width / tex.width;
+		Vector2 new_pos = point_to_pixel(window.mouse.position);
+		DrawRectangle(new_pos.x * cell_size, new_pos.y * cell_size, cell_size, cell_size, draw_color);
+	    }
 	}
     }
+
     Vector2 point_to_pixel(Vector2 point) {
 	point = Vector2Divide(point, {boundary.width, boundary.height});	
 	point = Vector2Multiply(point, {(float)img.width, (float)img.height});
 	point = {floor(point.x), floor(point.y)};
 	return point; 
+    }
+
+    bool is_point_inside(Vector2 point) {
+	return point.x < img.width && point.y < img.height && point.x >= 0.f && point.y >= 0.f;
+    }
+
+    void fill_region(Vector2 point, Color empty) {
+	if (ColorIsEqual(draw_color, empty)) return;
+	if (!is_point_inside(point)) return;
+	if (!ColorIsEqual(GetImageColor(img, point.x, point.y), bg_color)) return;
+	ImageDrawPixel(&img, point.x, point.y, draw_color);
+	fill_region({point.x + 1, point.y}, empty);
+	fill_region({point.x - 1, point.y}, empty);
+	fill_region({point.x, point.y + 1}, empty);
+	fill_region({point.x, point.y - 1}, empty);
     }
 };
 
@@ -272,23 +318,24 @@ Sprite init_sprite(const Window& window) {
     sprite.tex = LoadTextureFromImage(sprite.img);
     sprite.name = "sprite.png";
     sprite.boundary = {0.f, 0.f, window.width / 2.f, window.height / 2.f};
-    sprite.first_cell = {0.f, 0.f};
-    sprite.set_mode(window.mouse_mode);
+    sprite.set_mode(window.mouse.mode);
     return sprite;
 }
 Window init_window(float width, float height, const char* title) {
     Layout top_layout = Layout({0, 0, width, height}, 2, false);
-    Layout ui_layout = Layout(top_layout.get_slot(1), 5, true);
+    Layout ui_layout = Layout(top_layout.get_slot(1), 2, true);
     Layout cp_layout = Layout(ui_layout.get_slot(0), 4, true);
-    Layouts layouts(top_layout, ui_layout, cp_layout);
+    Layout button_layout = Layout(ui_layout.get_slot(1), 10, true);
+    Layouts layouts(top_layout, ui_layout, cp_layout, button_layout);
     Window window = Window(width, height, title, layouts);
-    window.color_picker.setup(window.draw_color, window.layouts.color_picker_layout);
-    window.set_bg_button.boundary = {window.width / 2.f, window.color_picker.boundary.height, window.width / 2.f, window.height / 20.f};
+    window.color_picker.setup(WHITE, window.layouts.color_picker_layout);
+    window.set_bg_button.boundary = window.layouts.button_layout.get_slot(0);
     window.set_bg_button.text = "set background color";
-    window.set_dc_button.boundary = window.set_bg_button.boundary; 
-    window.set_dc_button.boundary.y += window.set_dc_button.boundary.height;
+    window.set_dc_button.boundary = window.layouts.button_layout.get_slot(1); 
     window.set_dc_button.text = "set draw color";
-    window.mouse_mode = LINE;
+    window.toggle_mouse_mode_button.boundary = window.layouts.button_layout.get_slot(2); 
+    window.toggle_mouse_mode_button.text = mode_as_string(DRAW);
+    window.toggle_mouse_mode_button.color = WHITE;
     InitWindow(window.width, window.height, window.title);
     SetTargetFPS(window.fps);
     return window;
@@ -310,34 +357,45 @@ void check_slider(Slider& slider, Vector2 mouse_pos) {
 }
 
 void controls(Window& window, Sprite& sprite) {
-    window.mouse_pos = GetMousePosition();
-    if (CheckCollisionPointRec(window.mouse_pos, sprite.boundary)) {
+    window.mouse.position = GetMousePosition();
+    if (CheckCollisionPointRec(window.mouse.position, sprite.boundary)) {
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-	    if (window.mouse_mode == DRAW) {
-		sprite.set_pixel(sprite.point_to_pixel(window.mouse_pos), window.draw_color);
+	    if (window.mouse.mode == DRAW) {
+		sprite.set_pixel(sprite.point_to_pixel(window.mouse.position), sprite.draw_color);
 	    }
-	    else if (window.mouse_mode == LINE) {
-		sprite.first_cell = sprite.point_to_pixel(window.mouse_pos);
+	    else if (window.mouse.mode == LINE) {
+		window.mouse.last_click = sprite.point_to_pixel(window.mouse.position);
+	    }
+	    else if (window.mouse.mode == FILL) {
+		Vector2 cell = sprite.point_to_pixel(window.mouse.position);
+		sprite.fill_region(cell, GetImageColor(sprite.img, cell.x, cell.y));
 	    }
 	}
     }
     if (IsKeyPressed(KEY_S)) {
 	ExportImage(sprite.img, TextFormat("img/%s", sprite.name));
     }
-    check_slider(window.color_picker.r, window.mouse_pos);
-    check_slider(window.color_picker.g, window.mouse_pos);
-    check_slider(window.color_picker.b, window.mouse_pos);
-    check_slider(window.color_picker.a, window.mouse_pos);
-    if (CheckCollisionPointRec(window.mouse_pos, window.set_bg_button.boundary)) {
+    check_slider(window.color_picker.r, window.mouse.position);
+    check_slider(window.color_picker.g, window.mouse.position);
+    check_slider(window.color_picker.b, window.mouse.position);
+    check_slider(window.color_picker.a, window.mouse.position);
+    if (CheckCollisionPointRec(window.mouse.position, window.set_bg_button.boundary)) {
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
 	    window.set_bg_button.down = true;
 	    sprite.set_bg_col(window.color_picker.to_color());
 	}
     }
-    if (CheckCollisionPointRec(window.mouse_pos, window.set_dc_button.boundary)) {
+    if (CheckCollisionPointRec(window.mouse.position, window.set_dc_button.boundary)) {
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
 	    window.set_dc_button.down = true;
-	    window.draw_color = window.color_picker.to_color();
+	    sprite.draw_color = window.color_picker.to_color();
+	}
+    }
+    if (CheckCollisionPointRec(window.mouse.position, window.toggle_mouse_mode_button.boundary)) {
+	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+	    window.mouse.mode = (Mouse_Mode)((window.mouse.mode + 1) % MOUSE_MODE_MAX);
+	    window.toggle_mouse_mode_button.text = mode_as_string(window.mouse.mode);
+	    sprite.set_mode(window.mouse.mode);
 	}
     }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
