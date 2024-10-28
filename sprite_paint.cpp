@@ -10,7 +10,7 @@ typedef uint32_t u32;
 typedef uint8_t u8;
 
 enum Mouse_Mode {
-    DRAW, LINE, FILL, MOUSE_MODE_MAX
+    DRAW, LINE_START, LINE_END, FILL, MOUSE_MODE_MAX
 };
 
 struct Window;
@@ -22,8 +22,10 @@ const char* mode_as_string(Mouse_Mode mode) {
 
     case DRAW:
 	return "Draw";
-    case LINE:
-	return "Line";
+    case LINE_START:
+	return "Line Start";
+    case LINE_END:
+	return "Line End";
     case FILL:
 	return "Fill";
     case MOUSE_MODE_MAX:
@@ -246,13 +248,17 @@ struct Sprite {
 	if (mode == DRAW) {
 	    UpdateTexture(tex, img.data);
 	}
-	else if (mode == LINE) {
-	    //if (preview_img.data) UnloadImage(preview_img);
+	else if (mode == LINE_START) {
 	    preview_img = ImageCopy(img);
 	    UpdateTexture(tex, preview_img.data);
 	}
+	else if (mode == LINE_END) {
+	    UnloadImage(img);
+	    img = ImageCopy(preview_img);
+	    UpdateTexture(tex, img.data);
+	}
 	else if (mode == FILL) {
-
+	    UpdateTexture(tex, img.data);
 	}
     }
     void draw(Window& window) {
@@ -265,9 +271,18 @@ struct Sprite {
 		DrawRectangle(new_pos.x * cell_size, new_pos.y * cell_size, cell_size, cell_size, draw_color);
 	    }
 	}
-	else if (window.mouse.mode == LINE) {
+	else if (window.mouse.mode == LINE_START) {
+	    DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
+	    if (CheckCollisionPointRec(window.mouse.position, boundary)) {
+		float cell_size = boundary.width / tex.width;
+		Vector2 new_pos = point_to_pixel(window.mouse.position);
+		DrawRectangle(new_pos.x * cell_size, new_pos.y * cell_size, cell_size, cell_size, draw_color);
+	    }
+	}
+	else if (window.mouse.mode == LINE_END) {
+	    Vector2 last_cell = point_to_pixel(window.mouse.position);
+	    float cell_size = boundary.width / tex.width;
 	     if (CheckCollisionPointRec(window.mouse.position, boundary)) {
-		Vector2 last_cell = point_to_pixel(window.mouse.position);
 		if (last_cell.x != first_cell.x && last_cell.y != first_cell.y) {
 		    UnloadImage(preview_img);
 		    preview_img = ImageCopy(img);
@@ -276,6 +291,7 @@ struct Sprite {
 		}
 	    }
 	    DrawTexturePro(tex, {0.f, 0.f, (float)tex.width, (float)tex.height}, boundary, {0.f, 0.f}, 0.f, WHITE);
+	    DrawRectangle(last_cell.x * cell_size, last_cell.y * cell_size, cell_size, cell_size, MAGENTA);
 	}
 	else if (window.mouse.mode == FILL) {
 	    UpdateTexture(tex, img.data);
@@ -380,8 +396,14 @@ void controls(Window& window, Sprite& sprite) {
 	    if (window.mouse.mode == DRAW) {
 		sprite.set_pixel(sprite.point_to_pixel(window.mouse.position), sprite.draw_color);
 	    }
-	    else if (window.mouse.mode == LINE) {
+	    else if (window.mouse.mode == LINE_START) {
+		window.mouse.mode = LINE_END;
+		sprite.set_mode(LINE_END);
 		window.mouse.last_click = sprite.point_to_pixel(window.mouse.position);
+	    }
+	    else if (window.mouse.mode == LINE_END) {
+		window.mouse.mode = LINE_START;
+		sprite.set_mode(LINE_START);
 	    }
 	    else if (window.mouse.mode == FILL) {
 		Vector2 cell = sprite.point_to_pixel(window.mouse.position);
