@@ -13,9 +13,9 @@ enum Draw_Mode {
     DRAW, LINE, FILL, MOUSE_MODE_MAX
 };
 
-struct Window;
-struct Sprite;
-
+enum Layout_Type {
+    HORIZONTAL = 0, VERTICAL = 1,
+};
 
 const char* mode_as_string(Draw_Mode mode) {
     switch(mode) {
@@ -87,11 +87,11 @@ struct Layout {
 };
 
 struct Button {
-    Rectangle boundary;
+    Rectangle boundary = {0, 0, 10, 10};
     bool down = false;
-    const char* text;
-    Color color;
-    void draw() {
+    const char* text = "no text";
+    Color color = GRAY;
+    void draw() const {
 	Rectangle rec = down ? squish_rec(boundary, 5.f) : boundary;
 	Color contrast_col = reverse_brightness(color);
 	DrawRectangleRec(rec, color);
@@ -127,21 +127,9 @@ struct Slider {
 };
 
 struct Color_Picker {
-    Slider r;
-    Slider g;
-    Slider b;
-    Slider a;
-    Rectangle boundary;
-    Color to_color() {
-	Color color = BLACK;
-	color.r = r.value * 255;
-	color.g = g.value * 255;
-	color.b = b.value * 255;
-	color.a = a.value * 255;
-	return color;
-    }
-    void setup(Color color, const Layout& layout) {
-	boundary = layout.boundary;
+    Color_Picker(Rectangle boundary, Color color = WHITE) {
+	Layout layout = Layout(boundary, 4, false);
+	boundary = boundary;
 	r.value = color.r / 255.f;
 	g.value = color.g / 255.f;
 	b.value = color.b / 255.f;
@@ -164,7 +152,20 @@ struct Color_Picker {
 	b.handle_rec = rec_slice_horz(b.boundary, b.value * (max_slot_hor - 1), max_slot_hor);
 	a.boundary = layout.get_slot(3);
 	a.handle_rec = rec_slice_horz(a.boundary, a.value * (max_slot_hor - 1), max_slot_hor);
-	color = to_color();
+    };
+
+    Slider r;
+    Slider g;
+    Slider b;
+    Slider a;
+    Rectangle boundary;
+    Color to_color() {
+	Color color = BLACK;
+	color.r = r.value * 255;
+	color.g = g.value * 255;
+	color.b = b.value * 255;
+	color.a = a.value * 255;
+	return color;
     }
     void draw() {
 	r.draw();
@@ -174,52 +175,20 @@ struct Color_Picker {
     }
 };
 
-struct Layouts {
-    Layouts(Layout top, Layout ui, Layout cp, Layout button_layout): 
-	top_layout(top), ui_layout(ui), color_picker_layout(cp), button_layout(button_layout) {};
-    Layout top_layout;
-    Layout ui_layout;
-    Layout color_picker_layout;
-    Layout button_layout;
-};
-
 struct Mouse_Data {
     Vector2 position;
     Vector2 last_click;
 };
 
-struct Window {
-    float width;
-    float height;
-    const char* title;
-    u64 fps = 60;
-    Color bg_color = {0x18, 0x18, 0x18, 0xff};
-    Color_Picker color_picker;
-    Button set_bg_button;
-    Button set_dc_button;
-    Button toggle_mouse_mode_button;
-    Layouts layouts;
-    Mouse_Data mouse;
-    Window(float width, float height, const char* title, Layouts layouts):
-	width(width), height(height), title(title), layouts(layouts) {};
-    void frame_update() {
-	Color cp_color = color_picker.to_color();
-	set_bg_button.color = cp_color;
-	set_dc_button.color = cp_color;
-	color_picker.a.bg_color = {0xff, 0xff, 0xff, cp_color.a};
-	color_picker.r.bg_color = {0xff, 0, 0, color_picker.a.bg_color.r};
-	color_picker.g.bg_color = {0, 0xff, 0, color_picker.a.bg_color.g};
-	color_picker.b.bg_color = {0, 0, 0xff, color_picker.a.bg_color.b};
-    }
-    void draw() {
-	color_picker.draw();
-	set_bg_button.draw();
-	set_dc_button.draw();
-	toggle_mouse_mode_button.draw();
-    }
-};
-
 struct Sprite_Window {
+    Sprite_Window() {};
+    Sprite_Window (Rectangle boundary, Color background) {
+	assert(sprite_img.data);
+	this->sprite_img = GenImageColor(boundary.width, boundary.height, background);
+	preview_img = ImageCopy(sprite_img);
+	undo_img = ImageCopy(sprite_img);
+	tex = LoadTextureFromImage(sprite_img);
+    };
     Image sprite_img;    
     Image preview_img;
     Image undo_img;
@@ -317,43 +286,54 @@ private:
 };
 
 struct UI {
-
+    UI(Layout layout) 
+    :boundary(layout.boundary), color_picker(Color_Picker(layout.get_slot(0))) {
+	buttons[0].boundary = layout.get_slot(1); 
+	buttons[0].text = "Set Draw Color";
+	buttons[1].boundary = layout.get_slot(2); 
+	// should be bound to draw mode directly instead!!
+	buttons[1].text = "Draw";
+    }
+    Rectangle boundary;
+    u64 fps = 60;
+    Color bg_color = {0x18, 0x18, 0x18, 0xff};
+    Color_Picker color_picker;
+    Button buttons[2];
+    void frame_update() {
+	Color cp_color = color_picker.to_color();
+	buttons[0].color = cp_color;
+	color_picker.a.bg_color = {0xff, 0xff, 0xff, cp_color.a};
+	color_picker.r.bg_color = {0xff, 0, 0, color_picker.a.bg_color.r};
+	color_picker.g.bg_color = {0, 0xff, 0, color_picker.a.bg_color.g};
+	color_picker.b.bg_color = {0, 0, 0xff, color_picker.a.bg_color.b};
+    }
+    void draw() {
+	color_picker.draw();
+	for (const Button& button : buttons) {
+	    button.draw();
+	}
+    }
 };
 
 struct App {
+    App(float width, float height)
+    :	screen_width(width), screen_height(height), 
+	layout(Layout({0, 0, width, height} , 2, true)), ui(UI(Layout({width / 2.f, 0, width / 2.f, height}, 4, false))) {
+	Rectangle sprite_rec = layout.get_slot(0);
+	sprite_window = Sprite_Window(sprite_rec, BLACK);
+    }
     Sprite_Window sprite_window;   
     UI ui;
+    float screen_width;
+    float screen_height;
+    Layout layout;
     Mouse_Data mouse;
+    const char* name = "Sprite Paint";
+    void draw() {
+	sprite_window.draw(mouse.position);
+	ui.draw();
+    }
 };
-
-
-Sprite_Window init_sprite_window(Rectangle boundary) {
-    Sprite_Window sprite_window;
-    sprite_window.sprite_img = GenImageColor(10, 10, BLACK);
-    sprite_window.tex = LoadTextureFromImage(sprite_window.sprite_img);
-    sprite_window.boundary = boundary;
-    return sprite_window;
-}
-Window init_window(float width, float height, const char* title) {
-    Layout top_layout = Layout({0, 0, width, height}, 2, false);
-    Layout ui_layout = Layout(top_layout.get_slot(1), 2, true);
-    Layout cp_layout = Layout(ui_layout.get_slot(0), 4, true);
-    Layout button_layout = Layout(ui_layout.get_slot(1), 10, true);
-    Layouts layouts(top_layout, ui_layout, cp_layout, button_layout);
-    Window window = Window(width, height, title, layouts);
-    window.color_picker.setup(WHITE, window.layouts.color_picker_layout);
-    window.set_bg_button.boundary = window.layouts.button_layout.get_slot(0);
-    window.set_bg_button.text = "set background color";
-    window.set_dc_button.boundary = window.layouts.button_layout.get_slot(1); 
-    window.set_dc_button.text = "set draw color";
-    window.toggle_mouse_mode_button.boundary = window.layouts.button_layout.get_slot(2); 
-    window.toggle_mouse_mode_button.text = mode_as_string(DRAW);
-    window.toggle_mouse_mode_button.color = WHITE;
-    window.mouse.mode = DRAW;
-    InitWindow(window.width, window.height, window.title);
-    SetTargetFPS(window.fps);
-    return window;
-}
 
 void check_slider(Slider& slider, Vector2 mouse_pos) {
     if (CheckCollisionPointRec(mouse_pos, slider.boundary)) {
@@ -370,74 +350,62 @@ void check_slider(Slider& slider, Vector2 mouse_pos) {
     }
 }
 
-void controls(Window& window, Sprite& sprite) {
-    window.mouse.position = GetMousePosition();
-    if (CheckCollisionPointRec(window.mouse.position, sprite.boundary)) {
+void controls(App& app) {
+    app.mouse.position = GetMousePosition();
+    Sprite_Window& sprite = app.sprite_window;
+    UI& ui= app.ui;
+    if (CheckCollisionPointRec(app.mouse.position, sprite.boundary)) {
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-	    if (window.mouse.mode == DRAW) {
-		sprite.set_pixel(sprite.point_to_pixel(window.mouse.position), sprite.draw_color);
+	    if (sprite.mode == DRAW) {
+		sprite.set_pixel(sprite.point_to_pixel(app.mouse.position), sprite.draw_color);
 	    }
-	    else if (window.mouse.mode == LINE) {
-		window.mouse.mode = LINE_END;
-		sprite.set_mode(LINE_END);
-		window.mouse.last_click = sprite.point_to_pixel(window.mouse.position);
+	    else if (sprite.mode == LINE) {
+		app.mouse.last_click = sprite.point_to_pixel(app.mouse.position);
 	    }
-	    else if (window.mouse.mode == LINE_END) {
-		window.mouse.mode = LINE;
-		sprite.set_mode(LINE);
-	    }
-	    else if (window.mouse.mode == FILL) {
-		Vector2 cell = sprite.point_to_pixel(window.mouse.position);
+	    else if (sprite.mode == FILL) {
+		Vector2 cell = sprite.point_to_pixel(app.mouse.position);
 		sprite.fill_region(cell);
 	    }
 	}
     }
     if (IsKeyPressed(KEY_S)) {
-	ExportImage(sprite.img, TextFormat("img/%s", sprite.name));
-    }
-    check_slider(window.color_picker.r, window.mouse.position);
-    check_slider(window.color_picker.g, window.mouse.position);
-    check_slider(window.color_picker.b, window.mouse.position);
-    check_slider(window.color_picker.a, window.mouse.position);
-    if (CheckCollisionPointRec(window.mouse.position, window.set_bg_button.boundary)) {
+	ExportImage(sprite.sprite_img, TextFormat("img/%s", sprite.sprite_name));
+    }                         
+    check_slider(ui.color_picker.r, app.mouse.position);
+    check_slider(ui.color_picker.g, app.mouse.position);
+    check_slider(ui.color_picker.b, app.mouse.position);
+    check_slider(ui.color_picker.a, app.mouse.position);
+    if (CheckCollisionPointRec(app.mouse.position, ui.buttons[0].boundary)) {
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-	    window.set_bg_button.down = true;
-	    sprite.set_bg_col(window.color_picker.to_color());
+	    ui.buttons[0].down = true;
+	    sprite.draw_color = ui.color_picker.to_color();
 	}
     }
-    if (CheckCollisionPointRec(window.mouse.position, window.set_dc_button.boundary)) {
+    if (CheckCollisionPointRec(app.mouse.position, ui.buttons[1].boundary)) {
 	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-	    window.set_dc_button.down = true;
-	    sprite.draw_color = window.color_picker.to_color();
-	}
-    }
-    if (CheckCollisionPointRec(window.mouse.position, window.toggle_mouse_mode_button.boundary)) {
-	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-	    window.mouse.mode = (Draw_Mode)((window.mouse.mode + 1) % MOUSE_MODE_MAX);
-	    window.toggle_mouse_mode_button.text = mode_as_string(window.mouse.mode);
-	    sprite.set_mode(window.mouse.mode);
+	    sprite.mode = (Draw_Mode)((sprite.mode + 1) % MOUSE_MODE_MAX);
+	    ui.buttons[1].text = mode_as_string(sprite.mode);
+	    ui.buttons[1].down = true;
 	}
     }
     if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-	window.set_bg_button.down = false;
-	window.set_dc_button.down = false;
+	for (Button& b: ui.buttons) {
+	    b.down = false;
+	}
     }
 
 }
 
 int main() {
-    Window window = init_window(1000.f, 1000.f, "sprite paint");
-    Sprite sprite = init_sprite(window);
-    std::cout << "after init\n";
-    Texture preview_tex = LoadTextureFromImage(sprite.preview_img);
+    float window_width = 1000;
+    float window_height = 1000; 
+    App app = App(window_width, window_height);
     while(!WindowShouldClose()) {
-	controls(window, sprite);
+	controls(app);
 	BeginDrawing();
-	ClearBackground(window.bg_color);
-	sprite.draw(window);
-	window.draw();
-	window.frame_update();
-	DrawTexture(preview_tex, 0, sprite.boundary.height, WHITE);
+	ClearBackground(BLACK);
+	app.draw();
+	app.ui.frame_update();
 	EndDrawing();
     }
     CloseWindow();
