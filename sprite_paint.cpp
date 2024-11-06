@@ -182,12 +182,14 @@ struct Mouse_Data {
 
 struct Sprite_Window {
     Sprite_Window() {};
-    Sprite_Window (Rectangle boundary, Color background) {
-	assert(sprite_img.data);
-	this->sprite_img = GenImageColor(boundary.width, boundary.height, background);
-	preview_img = ImageCopy(sprite_img);
-	undo_img = ImageCopy(sprite_img);
+    Sprite_Window (Rectangle boundary, Color bg_col) {
+	std::cout << "before sprite window constructor\n";
+	sprite_img = GenImageColor(boundary.width, boundary.height, bg_col);
+	preview_img = GenImageColor(boundary.width, boundary.height, bg_col);
+	undo_img = GenImageColor(boundary.width, boundary.height, bg_col);
+	std::cout << "before texture creation\n";
 	tex = LoadTextureFromImage(sprite_img);
+	std::cout << "after sprite window constructor\n";
     };
     Image sprite_img;    
     Image preview_img;
@@ -320,7 +322,10 @@ struct App {
     :	screen_width(width), screen_height(height), 
 	layout(Layout({0, 0, width, height} , 2, true)), ui(UI(Layout({width / 2.f, 0, width / 2.f, height}, 4, false))) {
 	Rectangle sprite_rec = layout.get_slot(0);
+	InitWindow(width, height, name);
+	SetTargetFPS(fps);
 	sprite_window = Sprite_Window(sprite_rec, BLACK);
+	std::cout << "after app constructor\n";
     }
     Sprite_Window sprite_window;   
     UI ui;
@@ -329,6 +334,7 @@ struct App {
     Layout layout;
     Mouse_Data mouse;
     const char* name = "Sprite Paint";
+    float fps = 60;
     void draw() {
 	sprite_window.draw(mouse.position);
 	ui.draw();
@@ -400,6 +406,7 @@ int main() {
     float window_width = 1000;
     float window_height = 1000; 
     App app = App(window_width, window_height);
+    std::cout << "after app creation\n";
     while(!WindowShouldClose()) {
 	controls(app);
 	BeginDrawing();
