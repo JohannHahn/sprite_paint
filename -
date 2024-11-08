@@ -7,12 +7,15 @@ struct Mouse_Data {
     Vector2 last_click;
 };
 
+
+
 struct App {
+    App(){};
+    Sprite_Window sprite_window;   
+    UI ui;
     float screen_width;
     float screen_height;
     Layout layout;
-    Sprite_Window sprite_window;   
-    UI ui;
     Mouse_Data mouse;
     const char* name = "Sprite Paint";
     float fps = 60;
@@ -83,7 +86,7 @@ void controls(App& app) {
 
 }
 
-App init(float width, float height, const char* title) {
+void init(float width, float height, const char* title) {
     float fps = 60.f;
     InitWindow(width, height, title);
     SetTargetFPS(fps);
@@ -92,14 +95,14 @@ App init(float width, float height, const char* title) {
     UI app_ui;
     app_ui.init(Layout(app_layout.get_slot(1), 5, true));
     app_sprite_window.init(app_layout.get_slot(0), BLACK);
-    App app = { .screen_width = width, 	.screen_height = height, .layout = app_layout, 
-	.sprite_window = app_sprite_window, .ui = app_ui, .mouse = {0}, .name = title, .fps = fps};
-    return app;
+    App app = {.layout = app_layout, 
+	.sprite_window = app_sprite_window, .screen_width = width, 
+	.screen_height = height, .fps = fps, .ui = app_ui, .name = title, .mouse = {0}};
+    
 }
 
 int main() {
     std::cout << "after app creation\n";
-    App app = init(1000, 1000, "sprite paint");
     while(!WindowShouldClose()) {
 	controls(app);
 	BeginDrawing();
